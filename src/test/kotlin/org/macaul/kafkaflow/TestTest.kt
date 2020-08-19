@@ -1,5 +1,6 @@
 package org.macaul.kafkaflow
 
+import io.kotest.assertions.timing.eventually
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.extensions.testcontainers.perSpec
 import io.kotest.matchers.shouldBe
@@ -19,9 +20,13 @@ import org.testcontainers.containers.KafkaContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import java.util.*
+import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
 import kotlin.test.assertEquals
+import kotlin.time.ExperimentalTime
+import kotlin.time.seconds
 
+@ExperimentalTime
 class TestTest: StringSpec({
 
     val x = KafkaContainer()
@@ -45,21 +50,25 @@ class TestTest: StringSpec({
         val testTopic = "testTopic"
 
 
+        val pollerStarted = CountDownLatch(1)
         thread {
             println("Starting")
             val x2= runBlocking {
-                test.flowForTopic(testTopic).take(1).toList()
+                val myFlow = test.flowForTopic(testTopic)
+                pollerStarted.countDown()
+                myFlow.take(1).toList()
             }
             pulledMessages.addAll(x2)
             println("Done")
         }
-        delay(1000)
+        pollerStarted.await()
         val kafkaProducer = KafkaProducer<String, String>(propertiesFor(bootstrapServers))
         kafkaProducer.send(ProducerRecord(testTopic, "hello"))
         kafkaProducer.flush()
         kafkaProducer.close()
-        delay(5000)
-        pulledMessages shouldBe listOf("hello")
+        eventually(10.seconds){
+            pulledMessages shouldBe listOf("hello")
+        }
 
     }
 })
