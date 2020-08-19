@@ -17,11 +17,11 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
 import java.time.Duration
-import java.util.*
+import java.util.Properties
 import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 
-class  KafkaFlow<T>(val bootStrap: String, val deserializerClasss: Class<out Deserializer<T>>) {
+class KafkaFlow<T>(val bootStrap: String, val deserializerClasss: Class<out Deserializer<T>>) {
     val logger = LoggerFactory.getLogger(javaClass)
 
     private val kafkaProperties = Properties().apply {
@@ -73,6 +73,4 @@ class  KafkaFlow<T>(val bootStrap: String, val deserializerClasss: Class<out Des
             .flowOn(kafkaThread)
             .onCompletion { kafkaThread.close() }
     }
-
-
 }
