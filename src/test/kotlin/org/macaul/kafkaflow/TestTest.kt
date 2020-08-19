@@ -5,6 +5,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.extensions.testcontainers.perSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -48,26 +49,28 @@ class TestTest: StringSpec({
 
         val pulledMessages = mutableListOf<String>()
         val testTopic = "testTopic"
+        val kafkaProducer = KafkaProducer<String, String>(propertiesFor(bootstrapServers))
 
 
         val pollerStarted = CountDownLatch(1)
         thread {
             println("Starting")
             val x2= runBlocking {
-                val myFlow = test.flowForTopic(testTopic)
-                pollerStarted.countDown()
-                myFlow.take(1).toList()
+                val myFlow = test.flowForTopic(testTopic).onStart {
+                    pollerStarted.countDown()
+                }
+                myFlow.take(2).toList()
             }
             pulledMessages.addAll(x2)
             println("Done")
         }
         pollerStarted.await()
-        val kafkaProducer = KafkaProducer<String, String>(propertiesFor(bootstrapServers))
         kafkaProducer.send(ProducerRecord(testTopic, "hello"))
+        kafkaProducer.send(ProducerRecord(testTopic, "hello2"))
         kafkaProducer.flush()
         kafkaProducer.close()
         eventually(10.seconds){
-            pulledMessages shouldBe listOf("hello")
+            pulledMessages shouldBe listOf("hello", "hello2")
         }
 
     }
