@@ -21,7 +21,7 @@ import java.util.Properties
 import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 
-class KafkaFlow<T>(val bootStrap: String, val deserializerClasss: Class<out Deserializer<T>>) {
+class KafkaFlow<T>(private val bootStrap: String, private val topic: String, deserializerClasss: Class<out Deserializer<T>>) {
     val logger = LoggerFactory.getLogger(javaClass)
 
     private val kafkaProperties = Properties().apply {
@@ -31,21 +31,21 @@ class KafkaFlow<T>(val bootStrap: String, val deserializerClasss: Class<out Dese
         set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserializerClasss.name)
     }
 
-    fun flowForTopic(topic: String): Flow<T> {
-        val kafkaThread = Executors.newSingleThreadExecutor {
-            Thread(it, "kafka-$topic")
-        }.asCoroutineDispatcher()
-
-        logger.info("Starting KafkaConsumer")
+    fun startFlow(): Flow<T> {
         val kafkaConsumer = KafkaConsumer<ByteArray, T>(kafkaProperties)
-        val partitionsFor = kafkaConsumer.partitionsFor(topic)
-            .map { TopicPartition(it.topic(), it.partition()) }
-        kafkaConsumer.assign(partitionsFor)
-        kafkaConsumer.seekToEnd(partitionsFor)
-        logger.info("Started KafkaConsumer")
+        val kafkaThread = Executors.newSingleThreadExecutor {
+            Thread(it, "kafka-$bootStrap-$topic")
+        }.asCoroutineDispatcher()
 
         return flow {
             try {
+                logger.info("Starting KafkaConsumer for $topic")
+                val subscribedPartitions = kafkaConsumer.partitionsFor(topic)
+                    .map { TopicPartition(it.topic(), it.partition()) }
+                kafkaConsumer.assign(subscribedPartitions)
+                kafkaConsumer.seekToEnd(subscribedPartitions)
+                logger.info("Started KafkaConsumer for $topic")
+
                 while (true) {
                     val records = try {
                         kafkaConsumer.poll(Duration.ofSeconds(1))

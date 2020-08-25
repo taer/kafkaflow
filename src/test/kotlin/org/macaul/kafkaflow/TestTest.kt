@@ -4,10 +4,12 @@ import io.kotest.assertions.timing.eventually
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.extensions.testcontainers.perSpec
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -35,27 +37,30 @@ class TestTest : StringSpec({
     "doit" {
         val bootstrapServers = x.bootstrapServers
 
-        val test = KafkaFlow<String>(bootstrapServers, StringDeserializer::class.java)
+        val testTopic = "testTopic"
+        val test = KafkaFlow<String>(bootstrapServers, testTopic, StringDeserializer::class.java)
 
         val pulledMessages = mutableListOf<String>()
-        val testTopic = "testTopic"
         val kafkaProducer = KafkaProducer<String, String>(propertiesFor(bootstrapServers))
 
-        val pollerStarted = CountDownLatch(1)
+        val sem = Mutex( locked = true)
         thread {
             println("Starting")
             val x2 = runBlocking {
-                val myFlow = test.flowForTopic(testTopic).onStart {
-                    pollerStarted.countDown()
+                val myFlow = test.startFlow().onStart {
+                    sem.unlock()
                 }
                 myFlow.take(2).toList()
             }
             pulledMessages.addAll(x2)
             println("Done")
         }
-        pollerStarted.await()
+        sem.lock()
         kafkaProducer.send(ProducerRecord(testTopic, "hello"))
+        delay(500)
         kafkaProducer.send(ProducerRecord(testTopic, "hello2"))
+        delay(500)
+        kafkaProducer.send(ProducerRecord(testTopic, "notConsumed"))
         kafkaProducer.flush()
         kafkaProducer.close()
         eventually(10.seconds) {
