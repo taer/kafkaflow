@@ -17,7 +17,6 @@ import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.testcontainers.containers.KafkaContainer
 import java.util.Properties
-import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
 import kotlin.time.ExperimentalTime
 import kotlin.time.seconds
