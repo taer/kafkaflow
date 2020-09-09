@@ -22,10 +22,12 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.seconds
 
 @ExperimentalTime
-class TestTest : StringSpec({
+class IntegrationTest : StringSpec({
 
-    val x = KafkaContainer()
-    listener(x.perSpec()) // converts container to listener and registering it with Kotest.
+    val kafkaContainer = KafkaContainer()
+    listener(kafkaContainer.perSpec()) // converts container to listener and registering it with Kotest.
+
+    val topicForTest = "testTopic"
 
     fun propertiesFor(bootStrap: String): Properties = Properties().apply {
         set(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootStrap)
@@ -33,33 +35,31 @@ class TestTest : StringSpec({
         set(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer::class.java.name)
     }
 
-    "doit" {
-        val bootstrapServers = x.bootstrapServers
+    "test flow consumes" {
+        val bootstrapServers = kafkaContainer.bootstrapServers
 
-        val testTopic = "testTopic"
-        val test = KafkaFlow<String>(bootstrapServers, testTopic, StringDeserializer::class.java)
+        val test = KafkaFlow<String>(bootstrapServers, topicForTest, StringDeserializer::class.java)
 
         val pulledMessages = mutableListOf<String>()
         val kafkaProducer = KafkaProducer<String, String>(propertiesFor(bootstrapServers))
 
         val sem = Mutex( locked = true)
         thread {
-            println("Starting")
-            val x2 = runBlocking {
+            val twoMessages = runBlocking {
                 val myFlow = test.startFlow().onStart {
+
                     sem.unlock()
                 }
                 myFlow.take(2).toList()
             }
-            pulledMessages.addAll(x2)
-            println("Done")
+            pulledMessages.addAll(twoMessages)
         }
         sem.lock()
-        kafkaProducer.send(ProducerRecord(testTopic, "hello"))
+        kafkaProducer.send(ProducerRecord(topicForTest, "hello"))
         delay(500)
-        kafkaProducer.send(ProducerRecord(testTopic, "hello2"))
+        kafkaProducer.send(ProducerRecord(topicForTest, "hello2"))
         delay(500)
-        kafkaProducer.send(ProducerRecord(testTopic, "notConsumed"))
+        kafkaProducer.send(ProducerRecord(topicForTest, "notConsumed"))
         kafkaProducer.flush()
         kafkaProducer.close()
         eventually(10.seconds) {
