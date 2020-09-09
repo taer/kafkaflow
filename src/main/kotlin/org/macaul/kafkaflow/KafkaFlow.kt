@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.yield
 import mu.KotlinLogging
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.consumer.ConsumerRecords
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.RetriableException
@@ -44,22 +43,21 @@ class KafkaFlow<T>(
                 logger.info("Started KafkaConsumer for $topic")
 
                 while (true) {
-                    val records = try {
+                    try {
                         logger.info("pre-poll")
-                        kafkaConsumer.poll(Duration.ofSeconds(100)).also {
+                        val records = kafkaConsumer.poll(Duration.ofSeconds(100)).also {
                             logger.info("post-Poll")
+                        }
+                        if (records.isEmpty) {
+                            logger.info("no records")
+                            yield()
+                        } else {
+                            logger.info("yay records")
+                            records.forEach { emit(it.value()) }
                         }
                     } catch (e: RetriableException) {
                         logger.warn("Retryable Kafka exception. Delaying 5 seconds and retrying", e)
                         delay(5_000)
-                        ConsumerRecords.empty<ByteArray, T>()
-                    }
-                    if (records.isEmpty) {
-                        logger.info("no records")
-                        yield()
-                    } else {
-                        logger.info("yay records")
-                        records.forEach { emit(it.value()) }
                     }
                 }
             } catch (e: WakeupException) {
