@@ -43,7 +43,7 @@ class IntegrationTest : StringSpec({
         val pulledMessages = mutableListOf<String>()
         val kafkaProducer = KafkaProducer<String, String>(propertiesFor(bootstrapServers))
 
-        val sem = Mutex( locked = true)
+        val sem = Mutex(locked = true)
         thread {
             val twoMessages = runBlocking {
                 val myFlow = test.startFlow().onStart {

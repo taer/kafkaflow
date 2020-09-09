@@ -4,6 +4,11 @@
 
 plugins {
     kotlin("jvm") version "1.4.0"
+    id("org.jmailen.kotlinter") version "3.0.2"
+}
+
+kotlinter {
+    experimentalRules = true
 }
 
 repositories {
@@ -12,7 +17,7 @@ repositories {
 }
 
 tasks.withType<Test> {
-  useJUnitPlatform()
+    useJUnitPlatform()
 }
 
 dependencies {
