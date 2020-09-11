@@ -1,8 +1,10 @@
 package org.macaul.kafkaflow
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import mu.KotlinLogging
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -18,7 +20,6 @@ import java.util.concurrent.CancellationException
 
 class KafkaFlow<T>(
     private val bootStrap: String,
-    private val topic: String,
     deserializerClass: Class<out Deserializer<T>>
 ) {
     private val logger = KotlinLogging.logger {}
@@ -30,13 +31,14 @@ class KafkaFlow<T>(
         set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserializerClass.name)
     }
 
-    fun startFlow(): Flow<T> {
+    fun startFlow(vararg topic: String): Flow<T> {
         val kafkaConsumer = KafkaConsumer<ByteArray, T>(kafkaProperties)
         return flow {
             try {
                 logger.info("Starting KafkaConsumer for $topic")
-                val subscribedPartitions = kafkaConsumer.partitionsFor(topic)
+                val subscribedPartitions = topic.flatMap { kafkaConsumer.partitionsFor(it) }
                     .map { TopicPartition(it.topic(), it.partition()) }
+
                 logger.info("assigning $subscribedPartitions")
                 kafkaConsumer.assign(subscribedPartitions)
                 kafkaConsumer.seekToEnd(subscribedPartitions)
@@ -45,9 +47,12 @@ class KafkaFlow<T>(
                 while (true) {
                     try {
                         logger.info("pre-poll")
-                        val records = kafkaConsumer.poll(Duration.ofSeconds(100)).also {
-                            logger.info("post-Poll")
+                        val records = withContext(Dispatchers.IO){
+                            kafkaConsumer.poll(Duration.ofSeconds(100)).also {
+                                logger.info("post-Poll")
+                            }
                         }
+
                         if (records.isEmpty) {
                             logger.info("no records")
                             yield()
@@ -60,13 +65,10 @@ class KafkaFlow<T>(
                         delay(5_000)
                     }
                 }
-            } catch (e: WakeupException) {
-                logger.info("Shutting down")
+//            } catch (e: WakeupException) {
+//                logger.info("Shutting down")
             } catch (e: CancellationException) {
                 logger.info("We were canceled")
-            } catch (e: Exception) {
-                logger.warn("This is a fatal error!", e)
-                throw e
             } finally {
                 kafkaConsumer.close()
             }
