@@ -11,7 +11,6 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.RetriableException
-import org.apache.kafka.common.errors.WakeupException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.Deserializer
 import java.time.Duration
@@ -35,40 +34,33 @@ class KafkaFlow<T>(
         val kafkaConsumer = KafkaConsumer<ByteArray, T>(kafkaProperties)
         return flow {
             try {
-                logger.info("Starting KafkaConsumer for $topic")
+                logger.debug("Starting KafkaConsumer for $topic")
                 val subscribedPartitions = topic.flatMap { kafkaConsumer.partitionsFor(it) }
                     .map { TopicPartition(it.topic(), it.partition()) }
 
-                logger.info("assigning $subscribedPartitions")
+                logger.debug { "assigning $subscribedPartitions" }
                 kafkaConsumer.assign(subscribedPartitions)
                 kafkaConsumer.seekToEnd(subscribedPartitions)
-                logger.info("Started KafkaConsumer for $topic")
+                logger.debug { "Started KafkaConsumer for $topic" }
 
                 while (true) {
                     try {
-                        logger.info("pre-poll")
-                        val records = withContext(Dispatchers.IO){
-                            kafkaConsumer.poll(Duration.ofSeconds(100)).also {
-                                logger.info("post-Poll")
-                            }
+                        val records = withContext(Dispatchers.IO) {
+                            kafkaConsumer.poll(Duration.ofSeconds(1))
                         }
 
                         if (records.isEmpty) {
-                            logger.info("no records")
                             yield()
                         } else {
-                            logger.info("yay records")
                             records.forEach { emit(it.value()) }
                         }
                     } catch (e: RetriableException) {
-                        logger.warn("Retryable Kafka exception. Delaying 5 seconds and retrying", e)
+                        logger.warn(e) { "Retryable Kafka exception. Delaying 5 seconds and retrying" }
                         delay(5_000)
                     }
                 }
-//            } catch (e: WakeupException) {
-//                logger.info("Shutting down")
             } catch (e: CancellationException) {
-                logger.info("We were canceled")
+                logger.debug { "We were canceled" }
             } finally {
                 kafkaConsumer.close()
             }
