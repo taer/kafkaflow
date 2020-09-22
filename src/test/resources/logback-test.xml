@@ -8,4 +8,6 @@
     <root level="info">
         <appender-ref ref="STDOUT" />
     </root>
+    <logger name="org.macaul" level="DEBUG" />
+
 </configuration>
