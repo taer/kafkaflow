@@ -5,7 +5,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import mu.KotlinLogging
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -44,7 +43,6 @@ public class KafkaFlow<T>(
         logger.debug { "Started KafkaConsumer for $topics" }
         return flow {
             try {
-
                 while (true) {
                     try {
 //                        val records = withContext(Dispatchers.IO){
