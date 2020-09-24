@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import mu.KotlinLogging
@@ -17,7 +18,7 @@ import java.time.Duration
 import java.util.Properties
 import java.util.concurrent.CancellationException
 
-class KafkaFlow<T>(
+public class KafkaFlow<T>(
     private val bootStrap: String,
     deserializerClass: Class<out Deserializer<T>>
 ) {
@@ -30,24 +31,25 @@ class KafkaFlow<T>(
         set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserializerClass.name)
     }
 
-    fun startFlow(vararg topic: String): Flow<T> {
+    public fun startFlow(vararg topic: String): Flow<T> {
         val kafkaConsumer = KafkaConsumer<ByteArray, T>(kafkaProperties)
+        val topics = topic.joinToString(",")
+        logger.debug("Starting KafkaConsumer for $topics")
+        val subscribedPartitions = topic.flatMap { kafkaConsumer.partitionsFor(it) }
+            .map { TopicPartition(it.topic(), it.partition()) }
+
+        logger.debug { "assigning $subscribedPartitions" }
+        kafkaConsumer.assign(subscribedPartitions)
+        kafkaConsumer.seekToEnd(subscribedPartitions)
+        logger.debug { "Started KafkaConsumer for $topics" }
         return flow {
             try {
-                logger.debug("Starting KafkaConsumer for $topic")
-                val subscribedPartitions = topic.flatMap { kafkaConsumer.partitionsFor(it) }
-                    .map { TopicPartition(it.topic(), it.partition()) }
-
-                logger.debug { "assigning $subscribedPartitions" }
-                kafkaConsumer.assign(subscribedPartitions)
-                kafkaConsumer.seekToEnd(subscribedPartitions)
-                logger.debug { "Started KafkaConsumer for $topic" }
 
                 while (true) {
                     try {
-                        val records = withContext(Dispatchers.IO) {
-                            kafkaConsumer.poll(Duration.ofSeconds(1))
-                        }
+//                        val records = withContext(Dispatchers.IO){
+                        val records = kafkaConsumer.poll(Duration.ofMillis(500))
+//                        }
 
                         if (records.isEmpty) {
                             yield()
@@ -64,6 +66,6 @@ class KafkaFlow<T>(
             } finally {
                 kafkaConsumer.close()
             }
-        }
+        }.flowOn(Dispatchers.IO)
     }
 }

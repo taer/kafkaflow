@@ -3,12 +3,14 @@ package org.macaul.kafkaflow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.extensions.testcontainers.perSpec
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.sync.Mutex
+import mu.KotlinLogging
 import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.producer.KafkaProducer
@@ -71,6 +73,8 @@ class IntegrationTest : StringSpec({
     }
 
     "test concurrent flow consumes" {
+        val logger = KotlinLogging.logger {}
+
         val bootstrapServers = kafkaContainer.bootstrapServers
 
         val test = KafkaFlow<String>(bootstrapServers, StringDeserializer::class.java)
@@ -95,12 +99,19 @@ class IntegrationTest : StringSpec({
         consumer2.lock()
 
         kafkaProducer.send(ProducerRecord(anotherTopic, "topic2"))
+        logger.info { "pushed topic2" }
+        kafkaProducer.flush()
         delay(500)
         kafkaProducer.send(ProducerRecord(topicForTest, "hello"))
+        logger.info { "pushed hello" }
+        kafkaProducer.flush()
         delay(500)
         kafkaProducer.send(ProducerRecord(topicForTest, "hello2"))
+        logger.info { "pushed hello2" }
+        kafkaProducer.flush()
         delay(500)
         kafkaProducer.send(ProducerRecord(topicForTest, "notConsumed"))
+        logger.info { "pushed notConsumed" }
         kafkaProducer.flush()
         kafkaProducer.close()
 

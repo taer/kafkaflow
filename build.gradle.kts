@@ -17,6 +17,10 @@ kotlinter {
     experimentalRules = true
 }
 
+kotlin {
+    explicitApi()
+}
+
 repositories {
     mavenLocal()
     mavenCentral()
